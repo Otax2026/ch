@@ -59,35 +59,28 @@ function objToArray(obj) {
 // ════════════════════════════════════════════════════════════
 
 function bootstrap() {
-  // ── Timeout: if Firebase doesn't respond in 5s, show login anyway ──
-  const loadingTimeout = setTimeout(() => {
-    if (state.loading) {
-      console.warn('[RepChat] Firebase slow — showing login with cached/default data');
-      state.reps = state.reps.length ? state.reps : getDefaultReps();
-      finishLoading();
-    }
-  }, 5000);
+  // Show the login screen immediately — don't wait for Firebase
+  state.loading = false;
+  restoreSession(() => {
+    render();
+    if (state.currentUser) subscribeToChannel(state.activeChannel);
+  });
 
-  // Monitor connection
+  // Load Firebase data in the background — updates UI when ready
   fbRef('.info/connected').on('value', snap => {
     state.connected = !!snap.val();
     updateConnectionBadge();
   });
 
-  // Load reps (one-time then listen for changes)
   fbRef('reps').on('value', snap => {
-    clearTimeout(loadingTimeout);
     const data = snap.val();
     state.reps = data ? Object.values(data) : getDefaultReps();
-    if (!data) fbSetReps(); // first run — seed defaults
-    if (state.loading) finishLoading();
-    else partialRender();
+    if (!data) fbSetReps();
+    partialRender();
   });
 
-  // Load access keys
   fbRef('accessKeys').on('value', snap => {
     state.accessKeys = snap.val() || {};
-    if (!state.loading) partialRender();
   });
 }
 
@@ -295,11 +288,7 @@ function showInAppNotif(channel, msg) {
 function render() {
   const app = document.getElementById('app');
 
-  if (state.loading) {
-    app.innerHTML = renderLoadingScreen();
-    return;
-  }
-
+  // Never block on loading — always show something immediately
   if (!state.currentUser) {
     if (state.loginMode === 'admin') {
       app.innerHTML = renderAdminLogin();
@@ -321,7 +310,7 @@ function render() {
 
 // Re-render only the messages pane (avoids full DOM wipe on each message)
 function partialRender() {
-  if (!state.currentUser || state.loading) { render(); return; }
+  if (!state.currentUser) { render(); return; }
   const existing = document.getElementById('chat-app');
   if (!existing) { render(); return; }
   const app = document.getElementById('app');
@@ -929,6 +918,5 @@ function showNotif(msg, type = 'success') {
 //  START
 // ════════════════════════════════════════════════════════════
 
-// Show loading screen immediately
-document.getElementById('app').innerHTML = renderLoadingScreen();
+// Start app — show login immediately, Firebase loads in background
 bootstrap();
