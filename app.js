@@ -59,6 +59,15 @@ function objToArray(obj) {
 // ════════════════════════════════════════════════════════════
 
 function bootstrap() {
+  // ── Timeout: if Firebase doesn't respond in 5s, show login anyway ──
+  const loadingTimeout = setTimeout(() => {
+    if (state.loading) {
+      console.warn('[RepChat] Firebase slow — showing login with cached/default data');
+      state.reps = state.reps.length ? state.reps : getDefaultReps();
+      finishLoading();
+    }
+  }, 5000);
+
   // Monitor connection
   fbRef('.info/connected').on('value', snap => {
     state.connected = !!snap.val();
@@ -67,6 +76,7 @@ function bootstrap() {
 
   // Load reps (one-time then listen for changes)
   fbRef('reps').on('value', snap => {
+    clearTimeout(loadingTimeout);
     const data = snap.val();
     state.reps = data ? Object.values(data) : getDefaultReps();
     if (!data) fbSetReps(); // first run — seed defaults
